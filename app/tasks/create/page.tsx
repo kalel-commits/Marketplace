@@ -6,14 +6,9 @@ import { auth, User } from '@/lib/auth'
 import { tasks } from '@/lib/tasks'
 import toast from 'react-hot-toast'
 import Navbar from '@/components/Navbar'
-
-const CATEGORIES = [
-  'Website Creation',
-  'Social Media Management',
-  'Reel Editing',
-  'Branding',
-  'Other',
-]
+import Button from '@/components/ui/Button'
+import Card from '@/components/ui/Card'
+import { CATEGORIES } from '@/lib/constants'
 
 export default function CreateTaskPage() {
   const [user, setUser] = useState<User | null>(null)
@@ -41,15 +36,52 @@ export default function CreateTaskPage() {
     e.preventDefault()
     if (!user) return
 
+    // Validation
+    if (!title.trim()) {
+      toast.error('Please enter a task title')
+      return
+    }
+
+    if (title.trim().length < 5) {
+      toast.error('Title must be at least 5 characters')
+      return
+    }
+
+    if (!description.trim()) {
+      toast.error('Please enter a task description')
+      return
+    }
+
+    if (description.trim().length < 20) {
+      toast.error('Description must be at least 20 characters')
+      return
+    }
+
+    if (!category) {
+      toast.error('Please select a category')
+      return
+    }
+
+    const budgetValue = parseFloat(budget)
+    if (isNaN(budgetValue) || budgetValue <= 0) {
+      toast.error('Please enter a valid budget')
+      return
+    }
+
+    if (!location.trim()) {
+      toast.error('Please enter a location')
+      return
+    }
+
     setLoading(true)
 
     try {
       await tasks.createTask({
-        title,
-        description,
+        title: title.trim(),
+        description: description.trim(),
         category,
-        budget: parseFloat(budget),
-        location,
+        budget: budgetValue,
+        location: location.trim(),
         business_owner_id: user.id,
       })
       toast.success('Task created successfully!')
@@ -76,7 +108,8 @@ export default function CreateTaskPage() {
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <h1 className="text-3xl font-bold text-white mb-8">Create New Task</h1>
           
-          <form onSubmit={handleSubmit} className="bg-gray-900 shadow-lg rounded-lg border border-gray-800 p-6 space-y-6">
+          <Card>
+            <form onSubmit={handleSubmit} className="p-6 space-y-6">
             <div>
               <label htmlFor="title" className="block text-sm font-medium text-gray-300">
                 Task Title *
@@ -161,23 +194,23 @@ export default function CreateTaskPage() {
               </div>
             </div>
 
-            <div className="flex justify-end space-x-4">
-              <button
-                type="button"
-                onClick={() => router.back()}
-                className="px-4 py-2 border border-gray-700 rounded-md text-gray-300 hover:bg-gray-800 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-500 disabled:opacity-50 transition-colors"
-              >
-                {loading ? 'Creating...' : 'Create Task'}
-              </button>
-            </div>
-          </form>
+              <div className="flex justify-end space-x-4">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => router.back()}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  isLoading={loading}
+                >
+                  Create Task
+                </Button>
+              </div>
+            </form>
+          </Card>
         </div>
       </div>
     </>

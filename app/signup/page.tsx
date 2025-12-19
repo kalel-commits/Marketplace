@@ -3,9 +3,12 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { auth, UserRole } from '@/lib/auth'
+import { auth } from '@/lib/auth'
+import { UserRole } from '@/lib/firebase'
 import toast from 'react-hot-toast'
 import Navbar from '@/components/Navbar'
+import Button from '@/components/ui/Button'
+import Card from '@/components/ui/Card'
 
 export default function SignupPage() {
   const [email, setEmail] = useState('')
@@ -18,6 +21,32 @@ export default function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Validation
+    if (!fullName.trim()) {
+      toast.error('Please enter your full name')
+      return
+    }
+
+    if (fullName.trim().length < 2) {
+      toast.error('Name must be at least 2 characters')
+      return
+    }
+
+    if (!email.trim()) {
+      toast.error('Please enter your email')
+      return
+    }
+
+    if (!password) {
+      toast.error('Please enter a password')
+      return
+    }
+
+    if (password.length < 6) {
+      toast.error('Password must be at least 6 characters')
+      return
+    }
+
     if (!role) {
       toast.error('Please select a role')
       return
@@ -26,11 +55,11 @@ export default function SignupPage() {
     setLoading(true)
 
     try {
-      await auth.signUp(email, password, fullName, role as UserRole)
-      toast.success('Account created! Please check your email to verify.')
+      await auth.signUp(email.trim(), password, fullName.trim(), role as UserRole)
+      toast.success('Account created successfully!')
       
       // Sign in after signup
-      await auth.signIn(email, password)
+      await auth.signIn(email.trim(), password)
       const user = await auth.getCurrentUser()
       
       if (user?.role === 'business_owner') {
@@ -49,16 +78,17 @@ export default function SignupPage() {
     <>
       <Navbar />
       <div className="min-h-screen flex items-center justify-center bg-black py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8">
-          <div>
-            <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
-              Create your account
-            </h2>
-            <p className="mt-2 text-center text-sm text-gray-400">
-              Choose your role to get started
-            </p>
-          </div>
-          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+        <div className="max-w-md w-full">
+          <Card className="p-8">
+            <div className="mb-8">
+              <h2 className="text-center text-3xl font-extrabold text-white">
+                Create your account
+              </h2>
+              <p className="mt-2 text-center text-sm text-gray-400">
+                Choose your role to get started
+              </p>
+            </div>
+            <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-4">
               <div>
                 <label htmlFor="fullName" className="block text-sm font-medium text-gray-300">
@@ -144,25 +174,26 @@ export default function SignupPage() {
               </div>
             </div>
 
-            <div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 transition-colors"
-              >
-                {loading ? 'Creating account...' : 'Sign up'}
-              </button>
-            </div>
+              <div>
+                <Button
+                  type="submit"
+                  isLoading={loading}
+                  className="w-full"
+                >
+                  Sign up
+                </Button>
+              </div>
 
-            <div className="text-center">
-              <Link
-                href="/login"
-                className="text-primary-400 hover:text-primary-300 transition-colors"
-              >
-                Already have an account? Sign in
-              </Link>
-            </div>
-          </form>
+              <div className="text-center">
+                <Link
+                  href="/login"
+                  className="text-primary-400 hover:text-primary-300 transition-colors"
+                >
+                  Already have an account? Sign in
+                </Link>
+              </div>
+            </form>
+          </Card>
         </div>
       </div>
     </>

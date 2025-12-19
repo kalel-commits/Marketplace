@@ -3,11 +3,16 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { tasks, Task } from '@/lib/tasks'
-import { applications, Application } from '@/lib/tasks'
-import { auth, User } from '@/lib/auth'
+import { tasks } from '@/lib/tasks'
+import { applications } from '@/lib/tasks'
+import { auth } from '@/lib/auth'
+import { User, Task, Application } from '@/lib/firebase'
 import toast from 'react-hot-toast'
 import Navbar from '@/components/Navbar'
+import Button from '@/components/ui/Button'
+import Card from '@/components/ui/Card'
+import StatusBadge from '@/components/ui/StatusBadge'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 
 export default function TaskDetailsPage() {
   const params = useParams()
@@ -15,11 +20,17 @@ export default function TaskDetailsPage() {
   const [task, setTask] = useState<Task | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [applicationsList, setApplicationsList] = useState<Application[]>([])
+  const [userApplication, setUserApplication] = useState<Application | null>(null)
   const [loading, setLoading] = useState(true)
   const [showApplyForm, setShowApplyForm] = useState(false)
   const [proposal, setProposal] = useState('')
   const [proposedPrice, setProposedPrice] = useState('')
   const [applying, setApplying] = useState(false)
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean
+    action: 'accept' | 'reject' | null
+    applicationId: string | null
+  }>({ isOpen: false, action: null, applicationId: null })
 
   useEffect(() => {
     loadData()
@@ -39,10 +50,22 @@ export default function TaskDetailsPage() {
         try {
           const apps = await applications.getApplicationsByTask(taskData.id)
           setApplicationsList(apps)
-          console.log('Loaded applications:', apps.length)
         } catch (error) {
           console.error('Error loading applications:', error)
           toast.error('Failed to load applications')
+        }
+      }
+
+      // Check if freelancer already applied
+      if (currentUser?.role === 'freelancer') {
+        try {
+          const userApps = await applications.getApplicationsByFreelancer(currentUser.id)
+          const existingApp = userApps.find((app) => app.task_id === taskData.id)
+          if (existingApp) {
+            setUserApplication(existingApp)
+          }
+        } catch (error) {
+          console.error('Error checking user application:', error)
         }
       }
     } catch (error) {
@@ -60,23 +83,52 @@ export default function TaskDetailsPage() {
       return
     }
 
+    // Validation
+    if (!proposal.trim()) {
+      toast.error('Please provide a proposal')
+      return
+    }
+
+    const price = parseFloat(proposedPrice)
+    if (isNaN(price) || price <= 0) {
+      toast.error('Please enter a valid price')
+      return
+    }
+
     setApplying(true)
     try {
       await applications.createApplication({
         task_id: task!.id,
         freelancer_id: user.id,
-        proposal,
-        proposed_price: parseFloat(proposedPrice),
+        proposal: proposal.trim(),
+        proposed_price: price,
       })
       toast.success('Application submitted successfully!')
       setShowApplyForm(false)
       setProposal('')
       setProposedPrice('')
-      // Note: Applications will be visible to business owner when they refresh or visit the page
+      await loadData() // Reload to show the application
     } catch (error: any) {
       toast.error(error.message || 'Failed to submit application')
     } finally {
       setApplying(false)
+    }
+  }
+
+  const handleApplicationAction = async (applicationId: string, action: 'accept' | 'reject') => {
+    try {
+      const status = action === 'accept' ? 'accepted' : 'rejected'
+      await applications.updateApplicationStatus(applicationId, status)
+      await loadData()
+      toast.success(`Application ${action === 'accept' ? 'accepted' : 'rejected'} successfully`)
+      
+      // If accepting, update task status to in_progress
+      if (action === 'accept' && task) {
+        await tasks.updateTaskStatus(task.id, 'in_progress')
+        await loadData()
+      }
+    } catch (error: any) {
+      toast.error(error.message || `Failed to ${action} application`)
     }
   }
 
@@ -111,12 +163,32 @@ export default function TaskDetailsPage() {
     )
   }
 
+  // Calculate derived values after early returns
   const isOwner = user?.id === task.business_owner_id
-  const canApply = user?.role === 'freelancer' && !isOwner
+  const canApply = user?.role === 'freelancer' && !isOwner && !userApplication && task.status === 'open'
+  const hasApplied = !!userApplication
 
   return (
     <>
       <Navbar />
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.action === 'accept' ? 'Accept Application' : 'Reject Application'}
+        message={
+          confirmDialog.action === 'accept'
+            ? 'Are you sure you want to accept this application? The task will be marked as in progress.'
+            : 'Are you sure you want to reject this application? This action cannot be undone.'
+        }
+        confirmLabel={confirmDialog.action === 'accept' ? 'Accept' : 'Reject'}
+        variant={confirmDialog.action === 'accept' ? 'primary' : 'danger'}
+        onConfirm={() => {
+          if (confirmDialog.applicationId && confirmDialog.action) {
+            handleApplicationAction(confirmDialog.applicationId, confirmDialog.action)
+          }
+          setConfirmDialog({ isOpen: false, action: null, applicationId: null })
+        }}
+        onCancel={() => setConfirmDialog({ isOpen: false, action: null, applicationId: null })}
+      />
       <div className="min-h-screen bg-black py-8">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <Link
@@ -126,11 +198,14 @@ export default function TaskDetailsPage() {
             ← Back to tasks
           </Link>
 
-          <div className="bg-gray-900 shadow-lg rounded-lg border border-gray-800 p-6 mb-6">
+          <Card className="p-6 mb-6">
             <div className="flex justify-between items-start mb-4">
               <div className="flex-1">
-                <h1 className="text-3xl font-bold text-white mb-2">{task.title}</h1>
-                <div className="flex items-center space-x-4 text-sm text-gray-400">
+                <div className="flex items-center gap-3 mb-2">
+                  <h1 className="text-3xl font-bold text-white">{task.title}</h1>
+                  <StatusBadge status={task.status} type="task" />
+                </div>
+                <div className="flex items-center flex-wrap gap-4 text-sm text-gray-400">
                   <span className="px-3 py-1 bg-primary-900/50 text-primary-300 rounded-full font-medium border border-primary-700">
                     {task.category}
                   </span>
@@ -168,38 +243,57 @@ export default function TaskDetailsPage() {
               </div>
             )}
 
+            {hasApplied && (
+              <div className="mt-6 pt-6 border-t border-gray-800">
+                <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
+                  <p className="text-blue-300 font-medium mb-2">You've already applied to this task</p>
+                  <div className="text-sm text-gray-300 space-y-1">
+                    <p><strong>Your Proposal:</strong> {userApplication?.proposal}</p>
+                    <p><strong>Your Proposed Price:</strong> ₹{userApplication?.proposed_price.toLocaleString()}</p>
+                    <div className="mt-2">
+                      <StatusBadge status={userApplication.status} type="application" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {canApply && (
               <div className="mt-6 pt-6 border-t border-gray-800">
                 {!showApplyForm ? (
-                  <button
+                  <Button
                     onClick={() => setShowApplyForm(true)}
-                    className="w-full px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-500 transition-colors"
+                    className="w-full"
                   >
                     Apply to this Task
-                  </button>
+                  </Button>
                 ) : (
                   <form onSubmit={handleApply} className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label htmlFor="proposal" className="block text-sm font-medium text-gray-300 mb-2">
                         Your Proposal *
                       </label>
                       <textarea
+                        id="proposal"
                         required
                         rows={4}
+                        minLength={20}
                         className="w-full rounded-md border-gray-700 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2 border bg-gray-800 text-white"
-                        placeholder="Explain why you're the right fit for this task..."
+                        placeholder="Explain why you're the right fit for this task (minimum 20 characters)..."
                         value={proposal}
                         onChange={(e) => setProposal(e.target.value)}
                       />
+                      <p className="text-xs text-gray-500 mt-1">{proposal.length}/20 characters minimum</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label htmlFor="proposedPrice" className="block text-sm font-medium text-gray-300 mb-2">
                         Your Proposed Price (₹) *
                       </label>
                       <input
+                        id="proposedPrice"
                         type="number"
                         required
-                        min="0"
+                        min="1"
                         step="0.01"
                         className="w-full rounded-md border-gray-700 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2 border bg-gray-800 text-white"
                         placeholder="5000"
@@ -208,33 +302,34 @@ export default function TaskDetailsPage() {
                       />
                     </div>
                     <div className="flex space-x-4">
-                      <button
+                      <Button
                         type="button"
+                        variant="secondary"
                         onClick={() => {
                           setShowApplyForm(false)
                           setProposal('')
                           setProposedPrice('')
                         }}
-                        className="flex-1 px-4 py-2 border border-gray-700 rounded-md text-gray-300 hover:bg-gray-800 transition-colors"
+                        className="flex-1"
                       >
                         Cancel
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="submit"
-                        disabled={applying}
-                        className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-500 disabled:opacity-50 transition-colors"
+                        isLoading={applying}
+                        className="flex-1"
                       >
-                        {applying ? 'Submitting...' : 'Submit Application'}
-                      </button>
+                        Submit Application
+                      </Button>
                     </div>
                   </form>
                 )}
               </div>
             )}
-          </div>
+          </Card>
 
           {isOwner && (
-            <div className="bg-gray-900 shadow-lg rounded-lg border border-gray-800 p-6">
+            <Card className="p-6">
               <h2 className="text-xl font-bold text-white mb-4">
                 Applications ({applicationsList.length})
               </h2>
@@ -245,67 +340,64 @@ export default function TaskDetailsPage() {
               ) : (
                 <div className="space-y-4">
                   {applicationsList.map((app) => (
-                  <div key={app.id} className="border border-gray-800 rounded-lg p-4 bg-gray-800/50">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="font-medium text-white">
-                          {app.freelancer?.full_name || 'Unknown'}
-                        </p>
-                        {app.freelancer?.location && (
-                          <p className="text-sm text-gray-400">📍 {app.freelancer.location}</p>
+                    <div key={app.id} className="border border-gray-800 rounded-lg p-4 bg-gray-800/50">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <p className="font-medium text-white">
+                            {app.freelancer?.full_name || 'Unknown'}
+                          </p>
+                          {app.freelancer?.location && (
+                            <p className="text-sm text-gray-400">📍 {app.freelancer.location}</p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-primary-400">₹{app.proposed_price.toLocaleString()}</p>
+                          <StatusBadge status={app.status} type="application" />
+                        </div>
+                      </div>
+                      <p className="text-gray-300 mb-3">{app.proposal}</p>
+                      <div className="flex items-center space-x-2">
+                        {app.freelancer?.phone && (
+                          <Button
+                            size="sm"
+                            variant="success"
+                            onClick={() => handleWhatsApp(app.freelancer?.phone)}
+                          >
+                            💬 WhatsApp
+                          </Button>
+                        )}
+                        {app.status === 'pending' && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="success"
+                              onClick={() => setConfirmDialog({
+                                isOpen: true,
+                                action: 'accept',
+                                applicationId: app.id,
+                              })}
+                            >
+                              Accept
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              onClick={() => setConfirmDialog({
+                                isOpen: true,
+                                action: 'reject',
+                                applicationId: app.id,
+                              })}
+                            >
+                              Reject
+                            </Button>
+                          </>
                         )}
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-primary-400">₹{app.proposed_price.toLocaleString()}</p>
-                        <span className={`text-xs px-2 py-1 rounded ${
-                          app.status === 'accepted' ? 'bg-green-900/50 text-green-300 border border-green-700' :
-                          app.status === 'rejected' ? 'bg-red-900/50 text-red-300 border border-red-700' :
-                          'bg-yellow-900/50 text-yellow-300 border border-yellow-700'
-                        }`}>
-                          {app.status}
-                        </span>
-                      </div>
                     </div>
-                    <p className="text-gray-300 mb-3">{app.proposal}</p>
-                    <div className="flex items-center space-x-2">
-                      {app.freelancer?.phone && (
-                        <button
-                          onClick={() => handleWhatsApp(app.freelancer?.phone)}
-                          className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-500 transition-colors"
-                        >
-                          💬 WhatsApp
-                        </button>
-                      )}
-                      {app.status === 'pending' && (
-                        <>
-                          <button
-                            onClick={async () => {
-                              await applications.updateApplicationStatus(app.id, 'accepted')
-                              await loadData()
-                              toast.success('Application accepted')
-                            }}
-                            className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-500 transition-colors"
-                          >
-                            Accept
-                          </button>
-                          <button
-                            onClick={async () => {
-                              await applications.updateApplicationStatus(app.id, 'rejected')
-                              await loadData()
-                              toast.success('Application rejected')
-                            }}
-                            className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-500 transition-colors"
-                          >
-                            Reject
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
               )}
-            </div>
+            </Card>
           )}
         </div>
       </div>

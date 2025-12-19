@@ -7,6 +7,11 @@ import { auth, User } from '@/lib/auth'
 import { tasks, Task } from '@/lib/tasks'
 import { applications, Application } from '@/lib/tasks'
 import Navbar from '@/components/Navbar'
+import Button from '@/components/ui/Button'
+import Card from '@/components/ui/Card'
+import StatusBadge from '@/components/ui/StatusBadge'
+import { DashboardCardSkeleton, TaskCardSkeleton } from '@/components/ui/LoadingSkeleton'
+import EmptyState from '@/components/ui/EmptyState'
 
 export default function BusinessDashboard() {
   const [user, setUser] = useState<User | null>(null)
@@ -50,8 +55,22 @@ export default function BusinessDashboard() {
     return (
       <>
         <Navbar />
-        <div className="min-h-screen flex items-center justify-center bg-black">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+        <div className="min-h-screen bg-black py-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <DashboardCardSkeleton key={i} />
+              ))}
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="p-6">
+                <TaskCardSkeleton />
+              </Card>
+              <Card className="p-6">
+                <TaskCardSkeleton />
+              </Card>
+            </div>
+          </div>
         </div>
       </>
     )
@@ -69,35 +88,32 @@ export default function BusinessDashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold text-white">Business Dashboard</h1>
-            <Link
-              href="/tasks/create"
-              className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-500 transition-colors"
-            >
-              + Create New Task
+            <Link href="/tasks/create">
+              <Button>+ Create New Task</Button>
             </Link>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-gray-900 rounded-lg shadow-lg border border-gray-800 p-6">
+            <Card className="p-6">
               <div className="text-sm font-medium text-gray-400">Open Tasks</div>
               <div className="mt-2 text-3xl font-bold text-primary-400">{openTasks}</div>
-            </div>
-            <div className="bg-gray-900 rounded-lg shadow-lg border border-gray-800 p-6">
+            </Card>
+            <Card className="p-6">
               <div className="text-sm font-medium text-gray-400">In Progress</div>
               <div className="mt-2 text-3xl font-bold text-blue-400">{inProgressTasks}</div>
-            </div>
-            <div className="bg-gray-900 rounded-lg shadow-lg border border-gray-800 p-6">
+            </Card>
+            <Card className="p-6">
               <div className="text-sm font-medium text-gray-400">Completed</div>
               <div className="mt-2 text-3xl font-bold text-green-400">{completedTasks}</div>
-            </div>
-            <div className="bg-gray-900 rounded-lg shadow-lg border border-gray-800 p-6">
+            </Card>
+            <Card className="p-6">
               <div className="text-sm font-medium text-gray-400">Pending Applications</div>
               <div className="mt-2 text-3xl font-bold text-yellow-400">{pendingApplications}</div>
-            </div>
+            </Card>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-gray-900 rounded-lg shadow-lg border border-gray-800 p-6">
+            <Card className="p-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold text-white">My Tasks</h2>
                 <Link
@@ -108,9 +124,14 @@ export default function BusinessDashboard() {
                 </Link>
               </div>
               {myTasks.length === 0 ? (
-                <p className="text-gray-400 text-center py-8">
-                  No tasks yet. <Link href="/tasks/create" className="text-primary-400 hover:text-primary-300">Create your first task</Link>
-                </p>
+                <EmptyState
+                  title="No tasks yet"
+                  description="Get started by creating your first task to connect with freelancers."
+                  action={{
+                    label: 'Create Your First Task',
+                    href: '/tasks/create',
+                  }}
+                />
               ) : (
                 <div className="space-y-4">
                   {myTasks.slice(0, 5).map((task) => (
@@ -129,14 +150,7 @@ export default function BusinessDashboard() {
                             <span className="font-semibold text-primary-400">₹{task.budget.toLocaleString()}</span>
                           </div>
                         </div>
-                        <span className={`ml-4 px-2 py-1 text-xs rounded ${
-                          task.status === 'open' ? 'bg-green-900/50 text-green-300 border border-green-700' :
-                          task.status === 'in_progress' ? 'bg-blue-900/50 text-blue-300 border border-blue-700' :
-                          task.status === 'completed' ? 'bg-gray-800 text-gray-300 border border-gray-700' :
-                          'bg-red-900/50 text-red-300 border border-red-700'
-                        }`}>
-                          {task.status}
-                        </span>
+                        <StatusBadge status={task.status} type="task" />
                       </div>
                     </Link>
                   ))}
@@ -152,10 +166,13 @@ export default function BusinessDashboard() {
               )}
             </div>
 
-            <div className="bg-gray-900 rounded-lg shadow-lg border border-gray-800 p-6">
+            <Card className="p-6">
               <h2 className="text-xl font-bold text-white mb-4">Recent Applications</h2>
               {recentApplications.length === 0 ? (
-                <p className="text-gray-400 text-center py-8">No applications yet</p>
+                <EmptyState
+                  title="No applications yet"
+                  description="Applications from freelancers will appear here when they apply to your tasks."
+                />
               ) : (
                 <div className="space-y-4">
                   {recentApplications.map((app) => (
@@ -176,20 +193,14 @@ export default function BusinessDashboard() {
                         </div>
                         <div className="text-right ml-4">
                           <p className="font-semibold text-primary-400">₹{app.proposed_price.toLocaleString()}</p>
-                          <span className={`text-xs px-2 py-1 rounded ${
-                            app.status === 'accepted' ? 'bg-green-900/50 text-green-300 border border-green-700' :
-                            app.status === 'rejected' ? 'bg-red-900/50 text-red-300 border border-red-700' :
-                            'bg-yellow-900/50 text-yellow-300 border border-yellow-700'
-                          }`}>
-                            {app.status}
-                          </span>
+                          <StatusBadge status={app.status} type="application" />
                         </div>
                       </div>
                     </Link>
                   ))}
                 </div>
               )}
-            </div>
+            </Card>
           </div>
         </div>
       </div>

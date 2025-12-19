@@ -1,4 +1,4 @@
-# Hyperlocal Marketplace MVP
+# NearCut MVP
 
 A minimal MVP for connecting local small businesses with nearby freelancers for digital services.
 

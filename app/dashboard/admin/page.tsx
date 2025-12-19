@@ -38,8 +38,16 @@ export default function AdminDashboard() {
       }
       setUser(currentUser)
 
+      if (!db) {
+        console.error('Firestore database is not initialized')
+        return
+      }
+
+      // TypeScript type narrowing - db is guaranteed to be defined after the check
+      const firestoreDb = db
+
       // Load all users
-      const usersSnapshot = await getDocs(collection(db, 'users'))
+      const usersSnapshot = await getDocs(collection(firestoreDb, 'users'))
       const usersList: User[] = []
       usersSnapshot.forEach((doc) => {
         const userData = doc.data()
@@ -56,7 +64,7 @@ export default function AdminDashboard() {
       setAllTasks(tasksData)
 
       // Load all applications
-      const applicationsSnapshot = await getDocs(collection(db, 'applications'))
+      const applicationsSnapshot = await getDocs(collection(firestoreDb, 'applications'))
       const applicationsList: Application[] = []
       for (const appDoc of applicationsSnapshot.docs) {
         const appData = appDoc.data()
